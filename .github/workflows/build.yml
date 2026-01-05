@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-linux-musl
+          - x86_64-windows-gnu
+          - aarch64-macos
+          - x86_64-macos
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Zig
+      uses: mlugg/setup-zig@v1
+      with:
+        version: 0.15.2
+
+    - name: Build
+      run: zig build -Doptimize=ReleaseSmall -Dtarget=${{ matrix.target }}
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: taskemall-${{ matrix.target }}
+        path: zig-out/bin/taskemall*

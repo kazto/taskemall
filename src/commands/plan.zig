@@ -9,15 +9,25 @@ pub fn execute(allocator: std.mem.Allocator, args: []const [:0]u8) !void {
     }
 
     var is_recurring = false;
+    var recurrence_pattern: ?[]const u8 = null;
     var arg_idx: usize = 0;
 
-    if (std.mem.eql(u8, args[0], "rec")) {
+    if (std.mem.eql(u8, args[0], "rec") or std.mem.eql(u8, args[0], "daily")) {
         is_recurring = true;
+        recurrence_pattern = "daily";
+        arg_idx += 1;
+    } else if (std.mem.eql(u8, args[0], "weekly")) {
+        is_recurring = true;
+        recurrence_pattern = "weekly";
+        arg_idx += 1;
+    } else if (std.mem.eql(u8, args[0], "workday")) {
+        is_recurring = true;
+        recurrence_pattern = "workday";
         arg_idx += 1;
     }
 
     if (args.len < arg_idx + 2) {
-        std.debug.print("Usage: plan [rec] <TASK NAME> <PLAN DATETIME>\n", .{});
+        std.debug.print("Usage: plan [daily|weekly|workday] <TASK NAME> <PLAN DATETIME>\n", .{});
         return;
     }
 
@@ -36,6 +46,6 @@ pub fn execute(allocator: std.mem.Allocator, args: []const [:0]u8) !void {
     try database.open(db_path);
     defer database.close();
 
-    try database.planTask(task_name, timestamp, is_recurring);
+    try database.planTask(task_name, timestamp, is_recurring, recurrence_pattern);
     std.debug.print("Planned '{s}' at {}\n", .{ task_name, timestamp });
 }

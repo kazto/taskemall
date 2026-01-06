@@ -11,5 +11,6 @@ pub const Entry = struct {
     timestamp: i64,
     type: EntryType,
     is_recurring: bool,
+    recurrence_pattern: ?[]const u8,
     created_at: i64,
 };

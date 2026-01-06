@@ -34,3 +34,31 @@ jobs:
       with:
         name: taskemall-${{ matrix.target }}
         path: zig-out/bin/taskemall*
+      
+    - name: Create Release
+      uses: actions/create-release@v4
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: ${{ github.ref_name }}
+        draft: true
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v4
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: zig-out/bin/taskemall*
+        asset_name: taskemall-${{ matrix.target }}
+        asset_content_type: application/octet-stream
+
+    - name: Publish Release
+      uses: eregon/publish-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        release_id: ${{ steps.create_release.outputs.id }}
+        

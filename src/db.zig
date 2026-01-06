@@ -37,6 +37,7 @@ pub const DB = struct {
             \\    timestamp INTEGER NOT NULL,
             \\    type TEXT NOT NULL,
             \\    is_recurring INTEGER DEFAULT 0,
+            \\    recurrence_pattern TEXT,
             \\    created_at INTEGER DEFAULT (unixepoch('now'))
             \\);
         ;
@@ -58,7 +59,7 @@ pub const DB = struct {
     }
 
     pub fn checkIn(self: *DB, task_name: []const u8, timestamp: i64) !void {
-        const sql = "INSERT INTO entries (task_name, timestamp, type, is_recurring) VALUES (?, ?, 'CHECK', 0)";
+        const sql = "INSERT INTO entries (task_name, timestamp, type, is_recurring, recurrence_pattern) VALUES (?, ?, 'CHECK', 0, NULL)";
         var stmt: ?*c.sqlite3_stmt = null;
 
         if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) {
@@ -76,7 +77,7 @@ pub const DB = struct {
     }
 
     pub fn logSequential(self: *DB) !void {
-        const sql = "SELECT datetime(timestamp, 'unixepoch', 'localtime'), type, task_name FROM entries ORDER BY timestamp ASC";
+        const sql = "SELECT datetime(timestamp, 'unixepoch', 'localtime'), type, task_name, recurrence_pattern FROM entries ORDER BY timestamp ASC";
         var stmt: ?*c.sqlite3_stmt = null;
         if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.DbPrepareFailed;
         defer _ = c.sqlite3_finalize(stmt);
@@ -85,29 +86,46 @@ pub const DB = struct {
             const date_str = c.sqlite3_column_text(stmt, 0);
             const type_str = c.sqlite3_column_text(stmt, 1);
             const task_name = c.sqlite3_column_text(stmt, 2);
+            var rec_str: []const u8 = "";
+            if (c.sqlite3_column_type(stmt, 3) != c.SQLITE_NULL) {
+                rec_str = std.mem.span(c.sqlite3_column_text(stmt, 3));
+            }
 
-            std.debug.print("{s} [{s}] {s}\n", .{ date_str, type_str, task_name });
+            if (rec_str.len > 0) {
+                std.debug.print("{s} [{s}] {s} (Repeat: {s})\n", .{ date_str, type_str, task_name, rec_str });
+            } else {
+                std.debug.print("{s} [{s}] {s}\n", .{ date_str, type_str, task_name });
+            }
         }
     }
 
     pub fn logSummary(self: *DB) !void {
-        const sql = "SELECT date(timestamp, 'unixepoch', 'localtime'), COUNT(*) FROM entries GROUP BY 1 ORDER BY 1 DESC";
+        const sql =
+            \\SELECT 
+            \\  date(timestamp, 'unixepoch', 'localtime'), 
+            \\  SUM(CASE WHEN type='PLAN' THEN 1 ELSE 0 END) as plan_count,
+            \\  SUM(CASE WHEN type='CHECK' THEN 1 ELSE 0 END) as check_count
+            \\FROM entries 
+            \\GROUP BY 1 
+            \\ORDER BY 1 DESC
+        ;
         var stmt: ?*c.sqlite3_stmt = null;
         if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.DbPrepareFailed;
         defer _ = c.sqlite3_finalize(stmt);
 
-        std.debug.print("Date\t\tCount\n", .{});
-        std.debug.print("--------------------\n", .{});
+        std.debug.print("Date\t\tPlan\tCheck\n", .{});
+        std.debug.print("--------------------------------\n", .{});
 
         while (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
             const date_str = c.sqlite3_column_text(stmt, 0);
-            const count = c.sqlite3_column_int(stmt, 1);
+            const plan_count = c.sqlite3_column_int(stmt, 1);
+            const check_count = c.sqlite3_column_int(stmt, 2);
 
-            std.debug.print("{s}\t{}\n", .{ date_str, count });
+            std.debug.print("{s}\t{}\t{}\n", .{ date_str, plan_count, check_count });
         }
     }
-    pub fn planTask(self: *DB, task_name: []const u8, timestamp: i64, is_recurring: bool) !void {
-        const sql = "INSERT INTO entries (task_name, timestamp, type, is_recurring) VALUES (?, ?, 'PLAN', ?)";
+    pub fn planTask(self: *DB, task_name: []const u8, timestamp: i64, is_recurring: bool, recurrence_pattern: ?[]const u8) !void {
+        const sql = "INSERT INTO entries (task_name, timestamp, type, is_recurring, recurrence_pattern) VALUES (?, ?, 'PLAN', ?, ?)";
         var stmt: ?*c.sqlite3_stmt = null;
         if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.DbPrepareFailed;
         defer _ = c.sqlite3_finalize(stmt);
@@ -115,6 +133,12 @@ pub const DB = struct {
         if (c.sqlite3_bind_text(stmt, 1, task_name.ptr, @intCast(task_name.len), null) != c.SQLITE_OK) return error.DbBindFailed;
         if (c.sqlite3_bind_int64(stmt, 2, timestamp) != c.SQLITE_OK) return error.DbBindFailed;
         if (c.sqlite3_bind_int(stmt, 3, if (is_recurring) 1 else 0) != c.SQLITE_OK) return error.DbBindFailed;
+
+        if (recurrence_pattern) |pattern| {
+            if (c.sqlite3_bind_text(stmt, 4, pattern.ptr, @intCast(pattern.len), null) != c.SQLITE_OK) return error.DbBindFailed;
+        } else {
+            if (c.sqlite3_bind_null(stmt, 4) != c.SQLITE_OK) return error.DbBindFailed;
+        }
 
         if (c.sqlite3_step(stmt) != c.SQLITE_DONE) return error.DbStepFailed;
     }

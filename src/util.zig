@@ -102,5 +102,9 @@ pub fn getDataDir(allocator: mem.Allocator) ![]const u8 {
         return fs.path.join(allocator, &[_][]const u8{ home, ".local", "share", "taskemall" });
     }
 
+    if (env_map.get("LOCALAPPDATA")) |localappdata| {
+        return fs.path.join(allocator, &[_][]const u8{ localappdata, "taskemall" });
+    }
+
     return error.HomeNotFound;
 }

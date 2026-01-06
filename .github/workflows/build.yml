@@ -77,7 +77,7 @@ jobs:
         run: zig build -Doptimize=ReleaseSmall -Dtarget=${{ matrix.target }}
 
       - name: Create Archive
-        run: tar cJf taskemall-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall
+        run: tar cJf taskemall-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall*
 
       - name: Upload Asset
         env:

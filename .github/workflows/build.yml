@@ -76,11 +76,11 @@ jobs:
 
       - name: Create Archive not Windows
         if: ${{ matrix.target != 'x86_64-windows-gnu' }}
-        run: tar cJf taskemall-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall
+        run: tar cJf taskemall-${{ needs.prepare.outputs.tag }}-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall
       
       - name: Create Archive Windows
         if: ${{ matrix.target == 'x86_64-windows-gnu' }}
-        run: cd zig-out/bin && zip taskemall-${{ matrix.target }}.zip taskemall.exe && mv taskemall-${{ matrix.target }}.zip ../..
+        run: cd zig-out/bin && zip taskemall-${{ needs.prepare.outputs.tag }}-${{ matrix.target }}.zip taskemall.exe && mv taskemall-${{ needs.prepare.outputs.tag }}-${{ matrix.target }}.zip ../..
 
       - name: Upload Asset
         if: ${{ matrix.target != 'x86_64-windows-gnu' }}
@@ -88,7 +88,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ matrix.target }}.tar.xz" --clobber
+          gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ needs.prepare.outputs.tag }}-${{ matrix.target }}.tar.xz" --clobber
 
       - name: Upload Asset Windows
         if: ${{ matrix.target == 'x86_64-windows-gnu' }}
@@ -96,13 +96,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ matrix.target }}.zip" --clobber
+          gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ needs.prepare.outputs.tag }}-${{ matrix.target }}.zip" --clobber
 
   publish_release:
     name: Publish Release
     needs: [build, prepare]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - name: Publish

@@ -76,15 +76,29 @@ jobs:
       - name: Build
         run: zig build -Doptimize=ReleaseSmall -Dtarget=${{ matrix.target }}
 
-      - name: Create Archive
-        run: tar cJf taskemall-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall*
+      - name: Create Archive not Windows
+        if: ${{ matrix.target != 'x86_64-windows-gnu' }}
+        run: tar cJf taskemall-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall
+      
+      - name: Create Archive Windows
+        if: ${{ matrix.target == 'x86_64-windows-gnu' }}
+        run: cd zig-out/bin && zip taskemall-${{ matrix.target }}.zip taskemall.exe && mv taskemall-${{ matrix.target }}.zip ../..
 
       - name: Upload Asset
+        if: ${{ matrix.target != 'x86_64-windows-gnu' }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ matrix.target }}.tar.xz" --clobber
+
+      - name: Upload Asset Windows
+        if: ${{ matrix.target == 'x86_64-windows-gnu' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ matrix.target }}.zip" --clobber
 
   publish_release:
     name: Publish Release

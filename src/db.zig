@@ -118,4 +118,33 @@ pub const DB = struct {
 
         if (c.sqlite3_step(stmt) != c.SQLITE_DONE) return error.DbStepFailed;
     }
+
+    pub fn getLastCheckEntry(self: *DB) !?@import("models.zig").Entry {
+        const sql = "SELECT id, task_name, timestamp, type, is_recurring, created_at FROM entries WHERE type = 'CHECK' ORDER BY timestamp DESC LIMIT 1";
+        var stmt: ?*c.sqlite3_stmt = null;
+        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.DbPrepareFailed;
+        defer _ = c.sqlite3_finalize(stmt);
+
+        if (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
+            const id = c.sqlite3_column_int64(stmt, 0);
+            const task_name_ptr = c.sqlite3_column_text(stmt, 1);
+            const timestamp = c.sqlite3_column_int64(stmt, 2);
+            // type is column 3, assume CHECK
+            const is_recurring_int = c.sqlite3_column_int(stmt, 4);
+            const created_at = c.sqlite3_column_int64(stmt, 5);
+
+            // We need to duplicate the task name string because it belongs to the statement
+            const task_name = try self.allocator.dupe(u8, std.mem.span(task_name_ptr));
+
+            return @import("models.zig").Entry{
+                .id = id,
+                .task_name = task_name,
+                .timestamp = timestamp,
+                .type = .CHECK,
+                .is_recurring = (is_recurring_int != 0),
+                .created_at = created_at,
+            };
+        }
+        return null;
+    }
 };

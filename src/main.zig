@@ -3,6 +3,7 @@ const init_cmd = @import("commands/init.zig");
 const check_cmd = @import("commands/check.zig");
 const log_cmd = @import("commands/log.zig");
 const plan_cmd = @import("commands/plan.zig");
+const status_cmd = @import("commands/status.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -27,6 +28,8 @@ pub fn main() !void {
         try log_cmd.execute(allocator, args[2..]);
     } else if (std.mem.eql(u8, command, "plan")) {
         try plan_cmd.execute(allocator, args[2..]);
+    } else if (std.mem.eql(u8, command, "status")) {
+        try status_cmd.execute(allocator);
     } else if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "-h") or std.mem.eql(u8, command, "--help")) {
         printUsage();
     } else {
@@ -45,6 +48,7 @@ fn printUsage() void {
         \\  check       Check in/out a task
         \\  log         View task logs
         \\  plan        Plan a task
+        \\  status      Show current working status
         \\
     ;
     std.debug.print("{s}\n", .{usage});

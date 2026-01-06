@@ -7,8 +7,52 @@ on:
     branches: [ "main" ]
 
 jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      commit_msg: ${{ steps.commit.outputs.msg }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Tag Name
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" != "push" ]]; then
+            tag=v$(date +%Y%m%d.%H%M%S)
+          else
+            tag=$(basename "${{ github.ref }}")
+          fi
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+
+      - name: Get Commit Message
+        id: commit
+        run: |
+          echo "msg=$(git log -1 --format='%h %s')" >> $GITHUB_OUTPUT
+
+  create_release:
+    name: Create Draft Release
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create --draft "${{ needs.prepare.outputs.tag }}" \
+            --title "${{ needs.prepare.outputs.tag }}" \
+            --notes "${{ needs.prepare.outputs.commit_msg }}" \
+            || echo "Release might already exist"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: [prepare, create_release]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -19,46 +63,36 @@ jobs:
           - x86_64-macos
 
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup Zig
-      uses: mlugg/setup-zig@v2
-      with:
-        version: 0.15.2
-
-    - name: Build
-      run: zig build -Doptimize=ReleaseSmall -Dtarget=${{ matrix.target }}
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: taskemall-${{ matrix.target }}
-        path: zig-out/bin/taskemall*
+      - uses: actions/checkout@v4
       
-    - name: Create Release
-      uses: actions/create-release@v4
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref_name }}
-        release_name: ${{ github.ref_name }}
-        draft: true
-        prerelease: false
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
 
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v4
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: zig-out/bin/taskemall*
-        asset_name: taskemall-${{ matrix.target }}
-        asset_content_type: application/octet-stream
+      - name: Build
+        run: zig build -Doptimize=ReleaseSmall -Dtarget=${{ matrix.target }}
 
-    - name: Publish Release
-      uses: eregon/publish-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        release_id: ${{ steps.create_release.outputs.id }}
-        
+      - name: Create Archive
+        run: tar cJf taskemall-${{ matrix.target }}.tar.xz -C zig-out/bin taskemall
+
+      - name: Upload Asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload "${{ needs.prepare.outputs.tag }}" "taskemall-${{ matrix.target }}.tar.xz" --clobber
+
+  publish_release:
+    name: Publish Release
+    needs: [build, prepare]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+           gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false
